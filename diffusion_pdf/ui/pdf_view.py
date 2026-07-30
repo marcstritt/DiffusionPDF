@@ -77,16 +77,20 @@ class PdfView(QPdfView):
                 self._print()
                 return
 
-        if mods == Qt.KeyboardModifier.NoModifier:
-            if key == Qt.Key.Key_Left:
-                self.left_pressed.emit()
-                return
-            if key == Qt.Key.Key_Right:
-                self.right_pressed.emit()
-                return
-            if key == Qt.Key.Key_Space:
-                self.space_pressed.emit()
-                return
+        if mods == Qt.KeyboardModifier.NoModifier and key in (
+            Qt.Key.Key_Left, Qt.Key.Key_Right, Qt.Key.Key_Space
+        ):
+            # Une touche de tri maintenue génère des événements d'auto-répétition
+            # du clavier : ils sont ignorés pour ne jamais trier plusieurs
+            # documents à partir d'un seul appui.
+            if not event.isAutoRepeat():
+                if key == Qt.Key.Key_Left:
+                    self.left_pressed.emit()
+                elif key == Qt.Key.Key_Right:
+                    self.right_pressed.emit()
+                else:
+                    self.space_pressed.emit()
+            return
 
         super().keyPressEvent(event)
 
