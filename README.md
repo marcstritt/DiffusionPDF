@@ -83,6 +83,62 @@ python -m venv .venv
 Génère `dist\DiffusionPDF-win64.exe` ainsi que son empreinte
 `dist\DiffusionPDF-win64.exe.sha256`.
 
+## Installation en production
+
+Pas d'installeur (MSI, etc.) : c'est un exécutable unique (`DiffusionPDF-win64.exe`),
+à récupérer sur la page [Releases](https://github.com/marcstritt/DiffusionPDF/releases)
+du dépôt.
+
+### 1. Choisir l'emplacement — important
+
+L'exécutable se met à jour lui-même en se remplaçant (voir plus bas), ce qui
+demande un accès en écriture à son propre dossier **sans droits
+administrateur**. Ne pas l'installer dans `C:\Program Files\` (protégé,
+réservé aux admins) : les mises à jour silencieuses échoueraient.
+
+Emplacement recommandé, propre à chaque utilisateur Windows :
+
+```
+%LOCALAPPDATA%\Programs\DiffusionPDF\DiffusionPDF-win64.exe
+```
+
+Y créer un raccourci (Bureau, menu Démarrer) pointant vers cet exécutable.
+
+### 2. Premier lancement
+
+- **Alerte SmartScreen** : l'exécutable n'est pas encore signé numériquement
+  (pas de certificat de signature de code pour cette v1). Windows affichera
+  *« Windows a protégé votre ordinateur »* au premier lancement — cliquer sur
+  *Informations complémentaires* puis *Exécuter quand même*. Cette alerte ne
+  réapparaît pas pour les lancements suivants de la même version.
+- L'application crée le fichier de configuration du poste et affiche un
+  message indiquant son emplacement, puis se ferme.
+- Éditer ce fichier (voir [Configuration](#configuration)) avec les vrais
+  chemins `INPUT` / `OUTPUT_LEFT` / `OUTPUT_RIGHT` / `OUTPUT_SPACE` du poste
+  (chemins locaux ou partages réseau `\\serveur\partage\...`), puis relancer
+  l'application.
+
+### 3. Droits d'accès
+
+Le compte Windows qui exécute l'application doit avoir les droits lecture
+**et écriture** sur `INPUT` et sur les trois répertoires `OUTPUT_*` (le tri
+déplace les fichiers). En cas de partage réseau, vérifier les permissions
+NTFS et de partage, pas uniquement l'accès applicatif.
+
+### 4. Lancement automatique à l'ouverture de session (optionnel)
+
+Pour un poste dédié au tri, placer un raccourci vers l'exécutable dans le
+dossier de démarrage de l'utilisateur (accessible via `Win+R` puis
+`shell:startup`) pour que l'application démarre avec la session Windows.
+
+### 5. Déploiement sur plusieurs postes
+
+Chaque poste/utilisateur possède sa propre configuration
+(`%LOCALAPPDATA%`) : il n'y a pas de configuration centralisée en v1.
+Pour équiper plusieurs postes, répéter les étapes 1 à 3 sur chacun (ou
+distribuer l'exécutable et un `config.toml` pré-rempli via votre outil de
+déploiement habituel, par exemple un script de connexion ou une GPO).
+
 ## Mise à jour automatique
 
 Au démarrage, l'application interroge silencieusement l'API GitHub
@@ -96,6 +152,11 @@ disponible :
 3. Aucune interaction utilisateur n'est requise ; la session de tri en
    cours n'est pas perdue (aucun fichier n'est déplacé pendant la mise à
    jour).
+
+Un accès sortant à `api.github.com` / `github.com` est nécessaire (poste
+sans internet ou derrière un proxy bloquant : la vérification échoue
+silencieusement et l'application continue de fonctionner normalement avec
+sa version installée).
 
 Pour publier une nouvelle version :
 
