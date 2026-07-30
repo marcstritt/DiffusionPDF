@@ -1,0 +1,21 @@
+[project]
+name = "diffusion-pdf"
+version = "0.1.0"
+description = "Visionneuse PDF plein écran pour tri manuel INPUT -> OUTPUT_LEFT / OUTPUT_RIGHT / OUTPUT_SPACE"
+requires-python = ">=3.11"
+dependencies = [
+    "PySide6>=6.6",
+    "platformdirs>=4.0",
+    "requests>=2.31",
+    "packaging>=23.0",
+]
+
+[project.scripts]
+diffusion-pdf = "diffusion_pdf.app:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["diffusion_pdf*"]
