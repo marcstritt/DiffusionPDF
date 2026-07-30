@@ -25,8 +25,9 @@ class MainWindow(QMainWindow):
         self._next_path: Optional[Path] = None
         self._broken_paths: set[Path] = set()
         self._sort_enabled = False
+        self._title_suffix = f"   [config : {Config.config_path()}]"
 
-        self.setWindowTitle("Diffusion PDF")
+        self._set_title("Diffusion PDF")
 
         self._pdf_view = PdfView(self)
         self.setCentralWidget(self._pdf_view)
@@ -68,6 +69,9 @@ class MainWindow(QMainWindow):
         QSettings().setValue("main_window/geometry", self.saveGeometry())
         super().closeEvent(event)
 
+    def _set_title(self, text: str) -> None:
+        self.setWindowTitle(f"{text}{self._title_suffix}")
+
     # ---- file d'attente ----
     def _on_queue_changed(self) -> None:
         if self._current_path is None:
@@ -104,7 +108,7 @@ class MainWindow(QMainWindow):
 
         if path is None:
             self._pdf_view.set_document(None)
-            self.setWindowTitle("Diffusion PDF — en attente de documents")
+            self._set_title("Diffusion PDF — en attente de documents")
             return
 
         self._show(path, doc)
@@ -112,7 +116,7 @@ class MainWindow(QMainWindow):
     def _show(self, path: Path, doc: Optional[QPdfDocument]) -> None:
         self._current_path = path
         self._current_document = doc
-        self.setWindowTitle(path.name)
+        self._set_title(path.name)
 
         if doc is not None and doc.status() == QPdfDocument.Status.Ready:
             self._pdf_view.set_document(doc)

@@ -42,6 +42,10 @@ automatiquement au premier lancement :
 
 - Windows : `%LOCALAPPDATA%\Promed\DiffusionPDF\config.toml`
 
+Son emplacement est toujours visible dans la barre de titre de la fenêtre
+(utile en support, notamment sur un poste dont on ne connaît pas la
+configuration).
+
 Au premier démarrage, l'application crée ce fichier avec des valeurs par
 défaut et affiche un message demandant de le compléter puis de relancer.
 Exemple de contenu :
