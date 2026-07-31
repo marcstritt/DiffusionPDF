@@ -7,11 +7,13 @@ import os
 
 PROJECT_ROOT = os.path.abspath(os.path.join(SPECPATH, ".."))
 
+ICON_PATH = os.path.join(SPECPATH, "assets", "app.ico")
+
 a = Analysis(
     [os.path.join(SPECPATH, "entrypoint.py")],
     pathex=[PROJECT_ROOT],
     binaries=[],
-    datas=[],
+    datas=[(ICON_PATH, ".")],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
@@ -35,5 +37,5 @@ exe = EXE(
     upx_exclude=[],
     runtime_tmpdir=None,
     console=False,
-    # icon='assets/app.ico',
+    icon=ICON_PATH,
 )

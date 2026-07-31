@@ -46,6 +46,21 @@ fragile ou non testé.
   de garde (`_sort_gate_timer`, `_sort_enabled`) a été entièrement retiré
   de `main_window.py`, ainsi que `sort_delay_after_last_page_ms` de
   `config.py`.
+- **Raccourci Bureau auto-créé au lancement plutôt qu'un vrai installeur**
+  (v0.1.4+) : cohérent avec la décision "pas d'installeur" déjà prise (v1
+  = exécutable unique). `diffusion_pdf/shortcut.py` shelle vers
+  PowerShell (`WScript.Shell` COM + `[Environment]::GetFolderPath
+  ('Desktop')`, qui respecte la redirection OneDrive du Bureau) plutôt
+  que d'ajouter `pywin32` comme dépendance — un seul appel, aucun paquet
+  supplémentaire à embarquer dans l'exe. Idempotent (`Test-Path` avant
+  création) et silencieux en cas d'échec (comme la vérification de
+  mise à jour), jamais bloquant/fatal. Icône : `packaging/assets/app.ico`
+  (généré via Pillow, dev-only, depuis `diffusionPDF.png` — Pillow n'est
+  **pas** une dépendance du paquet, uniquement utilisée une fois pour
+  produire l'`.ico` commité), utilisée à la fois comme icône de
+  l'exécutable (PyInstaller `icon=`) et comme icône de fenêtre à
+  l'exécution (`QApplication.setWindowIcon`, bundlée via `datas=` et
+  résolue depuis `sys._MEIPASS` en mode gelé).
 
 ## Bugs réels trouvés en testant (pas en relisant le code)
 
@@ -152,6 +167,15 @@ réapparaît :
 - **Test de l'exécutable compilé réel** : build PyInstaller, lancé comme
   vrai process Windows (`tasklist`/`taskkill` depuis bash, titre de
   fenêtre lu via `Get-Process | Select MainWindowTitle` en PowerShell).
+- **Test du raccourci Bureau + icône** (v0.1.4) : exe copié dans un
+  dossier isolé (jamais l'exécutable de production réel), lancé, présence
+  et cible de `DiffusionPDF.lnk` vérifiées via `WScript.Shell
+  .CreateShortcut(...)` en lecture, icône extraite avec
+  `[System.Drawing.Icon]::ExtractAssociatedIcon` + relue avec l'outil
+  Read pour comparaison visuelle. Idempotence vérifiée en relançant
+  l'exe et en comparant `LastWriteTime` du `.lnk` avant/après (inchangé).
+  ⚠️ Raccourci de test supprimé du vrai Bureau après coup (pointait vers
+  l'exe de scratchpad, pas l'installation réelle de l'utilisateur).
 - **Test de l'auto-update réel** : installé une version dans
   `%LOCALAPPDATA%\Programs\DiffusionPDF\`, publié une version
   supérieure sur GitHub, lancé l'ancienne, vérifié par hash SHA-256 du

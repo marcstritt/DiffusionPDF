@@ -85,7 +85,11 @@ python -m venv .venv
 ```
 
 Génère `dist\DiffusionPDF-win64.exe` ainsi que son empreinte
-`dist\DiffusionPDF-win64.exe.sha256`.
+`dist\DiffusionPDF-win64.exe.sha256`. L'icône de l'exécutable et de la
+fenêtre est `packaging/assets/app.ico`, généré depuis
+`packaging/assets/diffusionPDF.png` (à régénérer si l'image source change,
+par exemple avec Pillow : `Image.open(...).save("app.ico", sizes=[(16,16),
+(24,24),(32,32),(48,48),(64,64),(128,128),(256,256)])`).
 
 ## Installation en production
 
@@ -106,7 +110,10 @@ Emplacement recommandé, propre à chaque utilisateur Windows :
 %LOCALAPPDATA%\Programs\DiffusionPDF\DiffusionPDF-win64.exe
 ```
 
-Y créer un raccourci (Bureau, menu Démarrer) pointant vers cet exécutable.
+Au premier lancement, l'application crée elle-même un raccourci sur le
+Bureau (icône de l'application incluse) — aucune action manuelle requise.
+Idempotent : ne recrée pas le raccourci s'il existe déjà, y compris s'il a
+été déplacé (seule sa suppression déclenche une recréation).
 
 ### 2. Premier lancement
 
@@ -176,17 +183,22 @@ diffusion_pdf/
 ├── app.py                  # point d'entrée
 ├── config.py                # configuration par poste (TOML)
 ├── version.py                # source unique de la version
+├── shortcut.py                # auto-création du raccourci Bureau
 ├── core/
 │   ├── queue_manager.py      # file INPUT + détection fichier stable
 │   ├── cache.py               # préchargement du document suivant
 │   └── distributor.py         # déplacement vers OUTPUT_*
 ├── ui/
 │   ├── pdf_view.py            # rendu, zoom, impression, touches
-│   └── main_window.py         # assemblage, garde de lecture, distribution
+│   ├── main_window.py         # assemblage, distribution
+│   └── locations_dialog.py    # popup F1 (emplacements)
 └── update/
     └── updater.py             # vérification et application des mises à jour
 packaging/
 ├── entrypoint.py              # point d'entrée dédié pour PyInstaller
-└── diffusion_pdf.spec
+├── diffusion_pdf.spec
+└── assets/
+    ├── diffusionPDF.png       # icône source
+    └── app.ico                # icône multi-résolution (exe + fenêtre)
 build.ps1                      # build + empreinte SHA-256
 ```
