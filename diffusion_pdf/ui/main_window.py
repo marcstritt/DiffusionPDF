@@ -13,6 +13,7 @@ from ..core.cache import Preloader
 from ..core.distributor import move_to_bin
 from ..core.queue_manager import QueueManager
 from ..update.updater import UpdateWorker
+from ..version import __version__
 from .locations_dialog import LocationsDialog
 from .pdf_view import PdfView
 
@@ -79,7 +80,7 @@ class MainWindow(QMainWindow):
         self._refresh_title()
 
     def _refresh_title(self) -> None:
-        self.setWindowTitle(f"[{self._pending_count()}] {self._title_text}")
+        self.setWindowTitle(f"v{__version__} [{self._pending_count()}] {self._title_text}")
 
     def _pending_count(self) -> int:
         try:
