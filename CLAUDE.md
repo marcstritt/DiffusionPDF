@@ -230,6 +230,28 @@ réapparaît :
 
 ## Prochaine étape suggérée
 
-Valider zoom/impression manuellement, puis envisager la signature de
-code si le nombre de postes en production augmente (évite l'alerte
-SmartScreen à chaque poste).
+Par priorité :
+
+1. **Trier les 14 doublons déjà présents en production** (bug #7,
+   `C:\Users\mcs\Documents\DiffusionPDF\OUTPUT_LEFT` et `OUTPUT_RIGHT`) —
+   fichiers patients réels, identiques par paire, laissés intentionnellement
+   en l'état (pas supprimés par Claude). Le fix empêche la récidive mais ne
+   nettoie pas l'existant.
+2. **Confirmer en conditions réelles** (pas en scratchpad) que
+   l'instance déjà en cours d'utilisation par l'utilisateur (lancée depuis
+   `C:\Users\mcs\Downloads\DiffusionPDF-win64 (1).exe`, repérée pendant
+   cette session) se met bien à jour vers v0.1.5 toute seule au prochain
+   lancement, et que le raccourci Bureau apparaît avec la bonne icône.
+   Tout a été testé en environnement isolé (scratchpad) mais jamais sur
+   cette install réelle.
+3. Valider zoom (Ctrl +/-/0) et impression (Ctrl+P) manuellement — jamais
+   testés par une vraie pression de touche sur une fenêtre réelle.
+4. Envisager la signature de code si le nombre de postes en production
+   augmente (évite l'alerte SmartScreen à chaque poste).
+
+## État à la fin de la session (2026-07-31)
+
+v0.1.5 committée, poussée sur `origin/main` et publiée sur GitHub
+Releases (build testé avant publication). Rien en attente côté code :
+tous les changements demandés sont commités. Le seul suivi manuel restant
+est la liste ci-dessus, notamment le point 1 (données de production).
