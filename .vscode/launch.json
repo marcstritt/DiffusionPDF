@@ -1,0 +1,13 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "DiffusionPDF (module)",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "diffusion_pdf.app",
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal"
+        }
+    ]
+}

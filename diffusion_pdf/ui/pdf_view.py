@@ -18,6 +18,7 @@ class PdfView(QPdfView):
     left_pressed = Signal()
     right_pressed = Signal()
     space_pressed = Signal()
+    help_requested = Signal()
 
     _ZOOM_STEP = 1.15
     _ZOOM_MIN = 0.2
@@ -51,8 +52,14 @@ class PdfView(QPdfView):
         if page_size.height() <= 0:
             return
 
+        # QPdfView rend les points PDF (1/72 pouce) à la résolution logique de
+        # l'écran (96 DPI en général), pas 1 point = 1 pixel : sans ce facteur
+        # la page est rendue ~33% plus grande que prévu et déborde du
+        # viewport (rognée à droite et en bas), zoomFactor=1 n'étant pas la
+        # taille "actual size" en pixels.
+        points_to_px = self.logicalDpiY() / 72.0
         available_height = max(self.viewport().height() - 2 * self.pageSpacing(), 1)
-        self._base_zoom = available_height / page_size.height()
+        self._base_zoom = available_height / (page_size.height() * points_to_px)
         self.setZoomFactor(self._base_zoom * self._zoom_multiplier)
 
     def keyPressEvent(self, event) -> None:
@@ -93,6 +100,28 @@ class PdfView(QPdfView):
             return
 
         super().keyPressEvent(event)
+
+    def keyReleaseEvent(self, event) -> None:
+        if event.key() == Qt.Key.Key_F1 and not event.isAutoRepeat():
+            self.help_requested.emit()
+            return
+        super().keyReleaseEvent(event)
+
+    def ideal_content_width(self) -> Optional[int]:
+        """Largeur en pixels nécessaire pour afficher la page courante sans
+        rogner ni laisser de bande vide, au zoom d'ajustement en hauteur actuel."""
+        document = self.document()
+        if document is None or document.status() != QPdfDocument.Status.Ready:
+            return None
+        page_count = document.pageCount()
+        if page_count == 0:
+            return None
+        page = min(max(self.pageNavigator().currentPage(), 0), page_count - 1)
+        page_size = document.pagePointSize(page)
+        if page_size.height() <= 0:
+            return None
+        points_to_px = self.logicalDpiX() / 72.0
+        return round(page_size.width() * self._base_zoom * points_to_px)
 
     def _print(self) -> None:
         document = self.document()

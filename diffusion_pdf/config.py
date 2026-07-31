@@ -9,7 +9,6 @@ from platformdirs import user_config_dir
 APP_NAME = "DiffusionPDF"
 APP_AUTHOR = "Promed"
 
-DEFAULT_SORT_DELAY_MS = 1000
 DEFAULT_STABLE_CHECK_MS = 500
 
 
@@ -23,7 +22,6 @@ class Config:
     output_left: Path
     output_right: Path
     output_space: Path
-    sort_delay_after_last_page_ms: int = DEFAULT_SORT_DELAY_MS
     stable_file_check_ms: int = DEFAULT_STABLE_CHECK_MS
 
     @staticmethod
@@ -60,9 +58,6 @@ class Config:
                 output_left=Path(paths["output_left"]),
                 output_right=Path(paths["output_right"]),
                 output_space=Path(paths["output_space"]),
-                sort_delay_after_last_page_ms=int(
-                    behavior.get("sort_delay_after_last_page_ms", DEFAULT_SORT_DELAY_MS)
-                ),
                 stable_file_check_ms=int(
                     behavior.get("stable_file_check_ms", DEFAULT_STABLE_CHECK_MS)
                 ),
@@ -96,7 +91,6 @@ output_right = "{(base / "OUTPUT_RIGHT").as_posix()}"
 output_space = "{(base / "OUTPUT_SPACE").as_posix()}"
 
 [behavior]
-sort_delay_after_last_page_ms = {DEFAULT_SORT_DELAY_MS}
 stable_file_check_ms = {DEFAULT_STABLE_CHECK_MS}
 '''
         path.write_text(content, encoding="utf-8")

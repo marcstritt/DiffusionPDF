@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 
-from PySide6.QtCore import QSettings, QTimer
+from PySide6.QtCore import QTimer
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtPdf import QPdfDocument
 from PySide6.QtWidgets import QApplication, QMainWindow, QMessageBox
@@ -13,10 +13,16 @@ from ..core.cache import Preloader
 from ..core.distributor import move_to_bin
 from ..core.queue_manager import QueueManager
 from ..update.updater import UpdateWorker
+from .locations_dialog import LocationsDialog
 from .pdf_view import PdfView
 
 
 class MainWindow(QMainWindow):
+    # Ratio largeur/hauteur d'une page A4 portrait (595 x 842 pt) : seul
+    # format affiché par l'application, sert de largeur de fenêtre initiale
+    # avant le chargement du premier document.
+    _A4_ASPECT_RATIO = 595 / 842
+
     def __init__(self, config: Config) -> None:
         super().__init__()
         self._config = config
@@ -24,8 +30,6 @@ class MainWindow(QMainWindow):
         self._current_document: Optional[QPdfDocument] = None
         self._next_path: Optional[Path] = None
         self._broken_paths: set[Path] = set()
-        self._sort_enabled = False
-        self._title_suffix = f"   [config : {Config.config_path()}]"
 
         self._set_title("Diffusion PDF")
 
@@ -34,18 +38,15 @@ class MainWindow(QMainWindow):
         self._pdf_view.left_pressed.connect(self._on_left)
         self._pdf_view.right_pressed.connect(self._on_right)
         self._pdf_view.space_pressed.connect(self._on_space)
-        self._pdf_view.pageNavigator().currentPageChanged.connect(self._on_page_changed)
-
-        self._sort_gate_timer = QTimer(self)
-        self._sort_gate_timer.setSingleShot(True)
-        self._sort_gate_timer.timeout.connect(self._enable_sort)
+        self._pdf_view.help_requested.connect(self._show_locations_dialog)
 
         self._queue = QueueManager(config.input_dir, poll_interval_ms=config.stable_file_check_ms, parent=self)
         self._queue.queue_changed.connect(self._on_queue_changed)
+        self._queue.queue_changed.connect(self._refresh_title)
 
         self._preloader = Preloader(self)
 
-        self._restore_geometry()
+        self._init_geometry()
 
         self._update_worker = UpdateWorker(self)
         self._update_worker.update_applied.connect(QApplication.quit)
@@ -54,23 +55,40 @@ class MainWindow(QMainWindow):
         self._queue.start()
         self._advance()
 
+    # ---- popup d'emplacements (F1) ----
+    def _show_locations_dialog(self) -> None:
+        entries = [
+            ("Configuration", Config.config_path()),
+            ("INPUT", self._config.input_dir),
+            ("OUTPUT_LEFT", self._config.output_left),
+            ("OUTPUT_RIGHT", self._config.output_right),
+            ("OUTPUT_SPACE", self._config.output_space),
+        ]
+        LocationsDialog(entries, self).exec()
+
     # ---- fenêtre ----
-    def _restore_geometry(self) -> None:
-        settings = QSettings()
-        geometry = settings.value("main_window/geometry")
-        if geometry is not None:
-            self.restoreGeometry(geometry)
-            return
+    def _init_geometry(self) -> None:
+        # Toujours pleine hauteur d'écran : seul format affiché (A4) sert de
+        # largeur de départ, affinée par document via _fit_window_to_page.
         screen = QGuiApplication.primaryScreen().availableGeometry()
-        width = int(screen.height() * 0.72)
+        width = round(screen.height() * self._A4_ASPECT_RATIO)
         self.setGeometry(screen.x(), screen.y(), width, screen.height())
 
-    def closeEvent(self, event) -> None:
-        QSettings().setValue("main_window/geometry", self.saveGeometry())
-        super().closeEvent(event)
-
     def _set_title(self, text: str) -> None:
-        self.setWindowTitle(f"{text}{self._title_suffix}")
+        self._title_text = text
+        self._refresh_title()
+
+    def _refresh_title(self) -> None:
+        self.setWindowTitle(f"[{self._pending_count()}] {self._title_text}")
+
+    def _pending_count(self) -> int:
+        try:
+            return sum(
+                1 for p in self._config.input_dir.iterdir()
+                if p.is_file() and p.suffix.lower() == ".pdf"
+            )
+        except OSError:
+            return 0
 
     # ---- file d'attente ----
     def _on_queue_changed(self) -> None:
@@ -95,8 +113,6 @@ class MainWindow(QMainWindow):
 
     def _advance(self) -> None:
         self._current_path = None
-        self._sort_enabled = False
-        self._sort_gate_timer.stop()
 
         if self._next_path is not None:
             path = self._next_path
@@ -120,6 +136,7 @@ class MainWindow(QMainWindow):
 
         if doc is not None and doc.status() == QPdfDocument.Status.Ready:
             self._pdf_view.set_document(doc)
+            self._on_document_ready()
         else:
             doc = doc or QPdfDocument(self)
             self._current_document = doc
@@ -136,6 +153,7 @@ class MainWindow(QMainWindow):
             return
         if status == QPdfDocument.Status.Ready:
             self._pdf_view.set_document(doc)
+            self._on_document_ready()
         elif status == QPdfDocument.Status.Error:
             self._broken_paths.add(path)
             self._current_document = None
@@ -155,27 +173,26 @@ class MainWindow(QMainWindow):
             self._current_document.deleteLater()
             self._current_document = None
 
-    # ---- garde d'activation ←/→ (1s après la dernière page affichée) ----
-    def _on_page_changed(self, page: int) -> None:
-        doc = self._pdf_view.document()
-        if doc is None or doc.pageCount() == 0:
-            return
-        if page >= doc.pageCount() - 1:
-            self._sort_gate_timer.start(self._config.sort_delay_after_last_page_ms)
-        elif not self._sort_enabled:
-            self._sort_gate_timer.stop()
+    def _on_document_ready(self) -> None:
+        self._fit_window_to_page()
 
-    def _enable_sort(self) -> None:
-        self._sort_enabled = True
+    # ---- largeur de fenêtre adaptée à la page (hauteur toujours pleine) ----
+    def _fit_window_to_page(self) -> None:
+        ideal_width = self._pdf_view.ideal_content_width()
+        if ideal_width is None:
+            return
+        chrome = self.width() - self._pdf_view.viewport().width()
+        target_width = ideal_width + chrome
+        screen = QGuiApplication.primaryScreen().availableGeometry()
+        target_width = max(1, min(target_width, screen.width()))
+        self.resize(target_width, self.height())
 
     # ---- distribution ----
     def _on_left(self) -> None:
-        if self._sort_enabled:
-            self._dispatch(self._config.output_left)
+        self._dispatch(self._config.output_left)
 
     def _on_right(self) -> None:
-        if self._sort_enabled:
-            self._dispatch(self._config.output_right)
+        self._dispatch(self._config.output_right)
 
     def _on_space(self) -> None:
         self._dispatch(self._config.output_space)

@@ -29,11 +29,13 @@ autonome (PyInstaller) avec mise à jour automatique via GitHub Releases.
 | `←` | Déplacer le document vers `OUTPUT_LEFT` |
 | `→` | Déplacer le document vers `OUTPUT_RIGHT` |
 | `Espace` | Déplacer le document vers `OUTPUT_SPACE` |
+| `F1` (relâchée) | Ouvrir le popup des emplacements (config + INPUT/OUTPUT_*) |
 
-**Garde de lecture** : `←` et `→` ne deviennent actives qu'une seconde après
-l'affichage de la dernière page du document — impossible de trier un
-document sans être allé au bout. `Espace` n'est pas soumis à cette garde et
-reste actif immédiatement.
+`←`/`→`/`Espace` déplacent immédiatement le document affiché, sans devoir
+d'abord faire défiler jusqu'à sa dernière page.
+
+La barre de titre affiche `[N] nom_du_fichier.pdf`, où `N` est le nombre de
+PDF restants dans `INPUT`.
 
 ## Configuration
 
@@ -42,9 +44,8 @@ automatiquement au premier lancement :
 
 - Windows : `%LOCALAPPDATA%\Promed\DiffusionPDF\config.toml`
 
-Son emplacement est toujours visible dans la barre de titre de la fenêtre
-(utile en support, notamment sur un poste dont on ne connaît pas la
-configuration).
+Son emplacement est accessible depuis l'application via `F1` (utile en
+support, notamment sur un poste dont on ne connaît pas la configuration).
 
 Au premier démarrage, l'application crée ce fichier avec des valeurs par
 défaut et affiche un message demandant de le compléter puis de relancer.
@@ -61,7 +62,6 @@ output_right = "C:/Data/DiffusionPDF/OUTPUT_RIGHT"
 output_space = "C:/Data/DiffusionPDF/OUTPUT_SPACE"
 
 [behavior]
-sort_delay_after_last_page_ms = 1000   # délai de la garde ←/→
 stable_file_check_ms = 500              # intervalle de scan de INPUT
 ```
 
