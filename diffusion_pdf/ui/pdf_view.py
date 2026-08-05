@@ -28,6 +28,10 @@ class PdfView(QPdfView):
         super().__init__(parent)
         self.setPageMode(QPdfView.PageMode.MultiPage)
         self.setZoomMode(QPdfView.ZoomMode.Custom)
+        # Toujours visible (plutôt que "au besoin") : évite que la largeur du
+        # viewport ne change selon le document affiché, ce qui décalerait le
+        # rendu d'un document à l'autre.
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
         self._base_zoom = 1.0
         self._zoom_multiplier = 1.0
 

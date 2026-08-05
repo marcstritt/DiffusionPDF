@@ -24,13 +24,28 @@ class MainWindow(QMainWindow):
     # avant le chargement du premier document.
     _A4_ASPECT_RATIO = 595 / 842
 
+    # Documents chargés en arrière-plan en avance du document affiché : borné
+    # volontairement (pas tout le dossier INPUT, qui peut contenir des
+    # centaines de fichiers) pour limiter la mémoire consommée par les
+    # QPdfDocument ouverts simultanément.
+    _PRELOAD_AHEAD = 2
+
     def __init__(self, config: Config) -> None:
         super().__init__()
         self._config = config
         self._current_path: Optional[Path] = None
         self._current_document: Optional[QPdfDocument] = None
-        self._next_path: Optional[Path] = None
+        self._preload_paths: list[Path] = []
         self._broken_paths: set[Path] = set()
+        self._window_fitted = False
+
+        # Bloque ←/→ pendant config.arrow_lock_seconds après l'affichage de
+        # chaque document (Espace reste immédiat) : laisse le temps de voir
+        # la page avant de pouvoir la trier par erreur.
+        self._arrows_locked = False
+        self._arrow_lock_timer = QTimer(self)
+        self._arrow_lock_timer.setSingleShot(True)
+        self._arrow_lock_timer.timeout.connect(self._unlock_arrows)
 
         self._set_title("Diffusion PDF")
 
@@ -59,7 +74,7 @@ class MainWindow(QMainWindow):
     # ---- popup d'emplacements (F1) ----
     def _show_locations_dialog(self) -> None:
         entries = [
-            ("Configuration", Config.config_path()),
+            ("Configuration", Config.resolve_path() or Config.config_path()),
             ("INPUT", self._config.input_dir),
             ("OUTPUT_LEFT", self._config.output_left),
             ("OUTPUT_RIGHT", self._config.output_right),
@@ -95,30 +110,30 @@ class MainWindow(QMainWindow):
     def _on_queue_changed(self) -> None:
         if self._current_path is None:
             self._advance()
-        elif self._next_path is None:
-            self._preload_next()
+        else:
+            self._fill_preload_queue()
 
     def _exclude_set(self) -> set[Path]:
         exclude = set(self._broken_paths)
         if self._current_path is not None:
             exclude.add(self._current_path)
-        if self._next_path is not None:
-            exclude.add(self._next_path)
+        exclude.update(self._preload_paths)
         return exclude
 
-    def _preload_next(self) -> None:
-        candidate = self._queue.next_candidate(self._exclude_set())
-        if candidate is not None:
-            self._next_path = candidate
+    def _fill_preload_queue(self) -> None:
+        while len(self._preload_paths) < self._PRELOAD_AHEAD:
+            candidate = self._queue.next_candidate(self._exclude_set())
+            if candidate is None:
+                return
+            self._preload_paths.append(candidate)
             self._preloader.preload(candidate)
 
     def _advance(self) -> None:
         self._current_path = None
 
-        if self._next_path is not None:
-            path = self._next_path
-            doc = self._preloader.take(self._next_path)
-            self._next_path = None
+        if self._preload_paths:
+            path = self._preload_paths.pop(0)
+            doc = self._preloader.take(path)
         else:
             path = self._queue.next_candidate(self._exclude_set())
             doc = None
@@ -134,6 +149,7 @@ class MainWindow(QMainWindow):
         self._current_path = path
         self._current_document = doc
         self._set_title(path.name)
+        self._lock_arrows()
 
         if doc is not None and doc.status() == QPdfDocument.Status.Ready:
             self._pdf_view.set_document(doc)
@@ -147,7 +163,7 @@ class MainWindow(QMainWindow):
             if doc.status() == QPdfDocument.Status.Null:
                 doc.load(str(path))
 
-        self._preload_next()
+        self._fill_preload_queue()
 
     def _on_document_status(self, path: Path, doc: QPdfDocument, status) -> None:
         if path != self._current_path or doc is not self._current_document:
@@ -174,8 +190,21 @@ class MainWindow(QMainWindow):
             self._current_document.deleteLater()
             self._current_document = None
 
+    # ---- verrou temporaire ←/→ ----
+    def _lock_arrows(self) -> None:
+        self._arrows_locked = True
+        self._arrow_lock_timer.start(max(0, round(self._config.arrow_lock_seconds * 1000)))
+
+    def _unlock_arrows(self) -> None:
+        self._arrows_locked = False
+
     def _on_document_ready(self) -> None:
-        self._fit_window_to_page()
+        # La fenêtre ne s'adapte qu'au tout premier document affiché : ensuite
+        # l'utilisateur peut l'agrandir/redimensionner librement, sans qu'un
+        # document suivant ne l'y ramène de force.
+        if not self._window_fitted:
+            self._window_fitted = True
+            self._fit_window_to_page()
 
     # ---- largeur de fenêtre adaptée à la page (hauteur toujours pleine) ----
     def _fit_window_to_page(self) -> None:
@@ -190,9 +219,13 @@ class MainWindow(QMainWindow):
 
     # ---- distribution ----
     def _on_left(self) -> None:
+        if self._arrows_locked:
+            return
         self._dispatch(self._config.output_left)
 
     def _on_right(self) -> None:
+        if self._arrows_locked:
+            return
         self._dispatch(self._config.output_right)
 
     def _on_space(self) -> None:
