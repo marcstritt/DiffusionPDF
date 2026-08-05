@@ -7,7 +7,7 @@ via GitHub Releases.
 
 Dépôt : https://github.com/marcstritt/DiffusionPDF (public — nécessaire
 pour que l'auto-update, non authentifié, fonctionne sur les postes
-clients). Dernière version publiée : **v0.1.5**.
+clients). Dernière version publiée : **v0.1.6**.
 
 Le README.md documente l'usage, la configuration, le build et
 l'installation en production — s'y référer pour tout ce qui est stable.
