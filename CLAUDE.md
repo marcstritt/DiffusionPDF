@@ -61,6 +61,42 @@ fragile ou non testé.
   l'exécutable (PyInstaller `icon=`) et comme icône de fenêtre à
   l'exécution (`QApplication.setWindowIcon`, bundlée via `datas=` et
   résolue depuis `sys._MEIPASS` en mode gelé).
+- **Fenêtre adaptée au premier PDF seulement, pas à chaque document**
+  (v0.1.6) : `_fit_window_to_page` ne s'exécute plus que pour le tout
+  premier document affiché (`_window_fitted` dans `main_window.py`),
+  sur demande explicite — l'utilisateur veut pouvoir agrandir la
+  fenêtre ensuite sans qu'un document suivant ne la remette à sa taille
+  d'ajustement.
+- **Barre de défilement verticale toujours visible** (v0.1.6) :
+  `PdfView.setVerticalScrollBarPolicy(ScrollBarAlwaysOn)` plutôt que "au
+  besoin" — évite que la largeur du viewport (et donc le rendu) ne
+  change selon que la page déborde ou non.
+- **Préchargement borné à 2 documents d'avance** (v0.1.6), pas tout le
+  dossier INPUT : `MainWindow._PRELOAD_AHEAD = 2`, `_preload_paths`
+  (liste bornée) a remplacé l'ancien `_next_path` (un seul). Limite la
+  mémoire occupée par des `QPdfDocument` ouverts simultanément quand
+  INPUT contient des centaines de fichiers.
+- **Dialogue de première ouverture** (v0.1.6) remplace le message
+  "éditez ce fichier TOML à la main" : `SetupDialog` propose soit de
+  créer une nouvelle configuration (sélecteurs de dossiers INPUT/
+  OUTPUT_* + dossier où enregistrer `config.toml`), soit de reprendre un
+  `config.toml` déjà existant ailleurs sur le disque. Comme
+  `config.toml` peut désormais être enregistré à un endroit choisi par
+  l'utilisateur (pas seulement `%LOCALAPPDATA%\Promed\DiffusionPDF\`),
+  un petit fichier pointeur (`config_location.txt`, à l'emplacement
+  standard) note son emplacement réel pour que `Config.resolve_path()`
+  le retrouve aux lancements suivants sans redemander. Si `config.toml`
+  est à l'emplacement standard (cas par défaut, et celui de tous les
+  postes existants), aucun pointeur n'est créé — entièrement
+  rétrocompatible.
+- **Verrou temporisé ←/→ configurable** (v0.1.6, `arrow_lock_seconds`,
+  2 secondes par défaut) : à ne pas confondre avec l'ancienne garde
+  retirée après v0.1.3 (ci-dessous) — celle-ci était basée sur le
+  défilement de page et bloquait aussi Espace ; celle-ci est un simple
+  minuteur démarré à chaque nouveau document (`_lock_arrows` dans
+  `main_window.py`), ne bloque que ←/→ (Espace reste toujours
+  immédiat), et est réintroduite sur demande explicite de l'utilisateur
+  pour éviter un tri accidentel avant d'avoir vu la page.
 
 ## Bugs réels trouvés en testant (pas en relisant le code)
 
@@ -197,6 +233,48 @@ réapparaît :
   `git credential fill` (Git Credential Manager, déjà authentifié pour
   ce compte) — utilisé pour créer les releases et uploader les assets
   par `curl` brut.
+- **Test de `_lock_arrows`/`arrow_lock_seconds`** (v0.1.6) : vraie
+  `MainWindow` + `QTest.keyClick`, `arrow_lock_seconds=0.4` pour un test
+  rapide — vérifié que ←/→ sont sans effet (fichier toujours dans
+  INPUT) pendant le verrou, fonctionnent après son expiration, et
+  qu'Espace trie immédiatement même pendant le verrou d'un document
+  qui vient d'apparaître.
+- **Test du dialogue de première ouverture** (`SetupDialog`, v0.1.6) :
+  construction + bascule entre les deux modes (nouvelle config /
+  config existante) vérifiée à vide (`QApplication` offscreen, sans
+  fenêtre visible) ; `Config.create()` / `Config.adopt_existing()` /
+  `Config.resolve_path()` (mécanisme du fichier pointeur) testés en
+  isolation avec un dossier "standard" et un dossier "personnalisé"
+  factices. ⚠️ Jamais exécuté de bout en bout comme un vrai premier
+  lancement (l'app ne montre ce dialogue que si aucun `config.toml`
+  n'existe encore, ce qui n'est vrai sur aucun poste de test
+  disponible).
+- **⚠️ Piège rencontré en testant `Config` avec un emplacement custom** :
+  `os.environ['APPDATA'] = ...` n'a **aucun effet** sur
+  `platformdirs.user_config_dir()` sous Windows (résolu via l'API
+  Windows/registre, pas la variable d'environnement) — une tentative de
+  test isolé a donc silencieusement écrit dans le **vrai**
+  `config.toml` de production (`%LOCALAPPDATA%\Promed\DiffusionPDF\`)
+  au lieu d'un dossier de scratch. Repéré immédiatement (relecture du
+  fichier juste après écriture) et restauré avec les chemins réels
+  documentés dans ce fichier (`C:\Users\mcs\Documents\DiffusionPDF\
+  {INPUT,OUTPUT_LEFT,OUTPUT_RIGHT,OUTPUT_SPACE}`, confirmés présents
+  sur le disque). Aucune donnée perdue, mais la bonne méthode pour
+  tester `Config` avec un autre emplacement est de monkeypatcher la
+  référence importée dans le module (`diffusion_pdf.config.
+  user_config_dir = lambda *_: str(scratch_dir)`), jamais la variable
+  d'environnement.
+- **⚠️ Piège rencontré en publiant la release GitHub v0.1.6** : le
+  premier appel `curl -X POST .../releases` a répondu "Validation
+  Failed / tag already_exists" alors qu'aucune release n'avait encore
+  été créée dans cette session — la requête avait en réalité déjà
+  réussi une première fois (contenu du `body` de la release identique
+  au JSON envoyé), seule la réponse de cette réussite silencieuse n'a
+  pas été vue (retry réseau probable côté `curl`/tool). Avant de
+  recréer une release en cas d'erreur "already_exists", toujours
+  vérifier `GET /releases/tags/<tag>` : si elle existe déjà avec le bon
+  contenu, il suffit d'uploader les assets sur son `upload_url`, pas de
+  la recréer.
 
 ## Non testé / fragile
 
@@ -227,6 +305,19 @@ réapparaît :
 - **Comportement si `GITHUB_REPO` change de nom/propriétaire** :
   `diffusion_pdf/update/updater.py` a la constante en dur ; à mettre à
   jour manuellement si le dépôt est déplacé/renommé.
+- **Dialogue de première ouverture (`SetupDialog`, v0.1.6)** : jamais
+  déclenché comme un vrai premier lancement (nécessite l'absence de
+  `config.toml`, ce qui n'est vrai sur aucun poste disponible pour
+  tester sans risquer le fichier de production) — seulement testé en
+  isolation (voir ci-dessus). Le mode "reprendre un config.toml
+  existant ailleurs" (fichier pointeur `config_location.txt`) n'a en
+  particulier jamais été exercé avec un vrai chemin réseau/clé USB.
+- **Verrou ←/→ (`arrow_lock_seconds`, v0.1.6)** : le minuteur lui-même
+  est vérifié (`QTest`, délai raccourci à 0.4 s), mais jamais confirmé
+  par une vraie pression de touche humaine avec le délai par défaut de
+  2 s — à valider que la durée "se sent" bien en usage réel, pas trop
+  courte pour éviter l'erreur visée, pas trop longue pour ne pas
+  ralentir le tri d'un utilisateur expérimenté.
 
 ## Prochaine étape suggérée
 
@@ -239,19 +330,36 @@ Par priorité :
    nettoie pas l'existant.
 2. **Confirmer en conditions réelles** (pas en scratchpad) que
    l'instance déjà en cours d'utilisation par l'utilisateur (lancée depuis
-   `C:\Users\mcs\Downloads\DiffusionPDF-win64 (1).exe`, repérée pendant
-   cette session) se met bien à jour vers v0.1.5 toute seule au prochain
-   lancement, et que le raccourci Bureau apparaît avec la bonne icône.
-   Tout a été testé en environnement isolé (scratchpad) mais jamais sur
-   cette install réelle.
-3. Valider zoom (Ctrl +/-/0) et impression (Ctrl+P) manuellement — jamais
+   `C:\Users\mcs\Downloads\DiffusionPDF-win64 (1).exe`) se met bien à
+   jour vers **v0.1.6** toute seule au prochain lancement. Cette version
+   apporte plusieurs changements de comportement jamais vérifiés en usage
+   réel (voir "Non testé / fragile" ci-dessus) : verrou ←/→ de 2 s qui
+   "se sent" bien, fenêtre qui ne se redimensionne plus qu'au premier
+   document, scrollbar toujours visible. À observer au premier tri réel
+   après la mise à jour.
+3. **Tester le dialogue de première ouverture pour de vrai**, sur un
+   poste ou profil Windows sans `config.toml` existant (jamais fait —
+   voir "Non testé / fragile") : les deux modes ("nouvelle
+   configuration" et "reprendre un fichier existant"), y compris le
+   mécanisme de fichier pointeur si l'emplacement choisi n'est pas le
+   dossier standard.
+4. Valider zoom (Ctrl +/-/0) et impression (Ctrl+P) manuellement — jamais
    testés par une vraie pression de touche sur une fenêtre réelle.
-4. Envisager la signature de code si le nombre de postes en production
+5. Envisager la signature de code si le nombre de postes en production
    augmente (évite l'alerte SmartScreen à chaque poste).
 
-## État à la fin de la session (2026-07-31)
+## État à la fin de la session (2026-08-05)
 
-v0.1.5 committée, poussée sur `origin/main` et publiée sur GitHub
-Releases (build testé avant publication). Rien en attente côté code :
-tous les changements demandés sont commités. Le seul suivi manuel restant
-est la liste ci-dessus, notamment le point 1 (données de production).
+v0.1.6 committée (plusieurs commits, voir `git log`), poussée sur
+`origin/main` et publiée sur GitHub Releases avec les deux assets
+(`DiffusionPDF-win64.exe`, `.sha256`) — build testé (lancé comme
+process isolé, version affichée dans le titre confirmée) avant
+publication. Contenu de v0.1.6 : fenêtre adaptée au premier PDF
+seulement, scrollbar verticale toujours visible, préchargement borné à
+2 documents, dialogue de configuration au premier lancement, verrou
+temporisé ←/→ configurable (`arrow_lock_seconds`, 2 s par défaut).
+Rien en attente côté code : tous les changements demandés sont
+commités et poussés. Le seul suivi manuel restant est la liste
+ci-dessus, en particulier les points 1 (doublons de production
+toujours en place) et 2/3 (plusieurs comportements de v0.1.6 jamais
+vérifiés en conditions réelles, seulement testés en isolation).
