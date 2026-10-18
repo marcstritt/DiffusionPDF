@@ -118,7 +118,9 @@ fragile ou non testé.
   pleine hauteur seulement au tout premier lancement. Testé sous Linux
   offscreen (ordre, lot de 3 avec fichier arrivé en cours de lot, quit sur
   INPUT vide, quit sur inactivité, géométrie enregistrée) ; **jamais testé
-  sur Windows ni publié** (pas de bump de version / release faits).
+  sur Windows**. Publié en v0.1.7 (tag + release GitHub), mais sans exécutable
+  joint : à compiler sous Windows (`build.ps1`) puis à ajouter avec
+  `gh release upload v0.1.7 dist/DiffusionPDF-win64.exe`.
 
 ## Bugs réels trouvés en testant (pas en relisant le code)
 
