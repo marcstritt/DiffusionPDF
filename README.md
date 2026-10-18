@@ -6,18 +6,26 @@ distribués au clavier vers trois répertoires de sortie (`LEFT`, `RIGHT`,
 `SPACE`) sans souris, sans menu, sans outil — un pur « mode lecture ».
 
 Application desktop Windows (PySide6/Qt), compilée en un exécutable
-autonome (PyInstaller) avec mise à jour automatique via GitHub Releases.
+autonome (PyInstaller).
 
 ## Fonctionnement
 
-1. L'application surveille le répertoire `INPUT` configuré et affiche le
-   premier PDF détecté, dès que sa taille est stable (protection contre les
-   fichiers encore en cours d'écriture par un scanner, un LIS, etc.).
+1. L'application surveille le répertoire `INPUT` configuré et affiche les
+   PDF détectés dans l'ordre chronologique de création (le plus ancien
+   d'abord), dès que leur taille est stable (protection contre les fichiers
+   encore en cours d'écriture par un scanner, un LIS, etc.). Les documents
+   sont traités par lots (20 par défaut) : les nouveaux fichiers arrivés en
+   cours de lot ne sont pris en compte qu'une fois le lot entièrement traité.
 2. Le fichier suivant est préchargé en arrière-plan pendant que l'utilisateur
    consulte le document affiché, pour un enchaînement instantané.
 3. Une des trois touches de distribution renomme (déplace, sans changer le
    nom) le fichier affiché vers le répertoire correspondant, puis affiche le
    suivant automatiquement.
+4. L'application se ferme toute seule quand `INPUT` ne contient plus aucun
+   PDF depuis `idle_timeout_seconds`, ou après ce même délai sans action de l'utilisateur (clavier
+   ou souris). La taille et la position de la fenêtre ne sont jamais
+   imposées : celles choisies par l'utilisateur sont mémorisées dans son
+   profil Windows (`QSettings`) et reprises au lancement suivant.
 
 ### Raccourcis clavier
 
@@ -63,6 +71,9 @@ output_space = "C:/Data/DiffusionPDF/OUTPUT_SPACE"
 
 [behavior]
 stable_file_check_ms = 500              # intervalle de scan de INPUT
+arrow_lock_seconds = 2.0                # délai pendant lequel ←/→ sont ignorées
+idle_timeout_seconds = 60.0             # fermeture après inactivité (0 = jamais)
+batch_size = 20                         # documents par lot (0 = pas de limite)
 ```
 
 Les répertoires sont créés automatiquement s'ils n'existent pas.
@@ -84,8 +95,7 @@ python -m venv .venv
 .\build.ps1
 ```
 
-Génère `dist\DiffusionPDF-win64.exe` ainsi que son empreinte
-`dist\DiffusionPDF-win64.exe.sha256`. L'icône de l'exécutable et de la
+Génère `dist\DiffusionPDF-win64.exe`. L'icône de l'exécutable et de la
 fenêtre est `packaging/assets/app.ico`, généré depuis
 `packaging/assets/diffusionPDF.png` (à régénérer si l'image source change,
 par exemple avec Pillow : `Image.open(...).save("app.ico", sizes=[(16,16),
@@ -94,8 +104,7 @@ par exemple avec Pillow : `Image.open(...).save("app.ico", sizes=[(16,16),
 ## Installation en production
 
 Pas d'installeur (MSI, etc.) : c'est un exécutable unique (`DiffusionPDF-win64.exe`),
-à récupérer sur la page [Releases](https://github.com/marcstritt/DiffusionPDF/releases)
-du dépôt.
+produit par `.\build.ps1`.
 
 ### 1. Choisir l'emplacement — important
 
@@ -150,31 +159,10 @@ Pour équiper plusieurs postes, répéter les étapes 1 à 3 sur chacun (ou
 distribuer l'exécutable et un `config.toml` pré-rempli via votre outil de
 déploiement habituel, par exemple un script de connexion ou une GPO).
 
-## Mise à jour automatique
+## Mise à jour
 
-Au démarrage, l'application interroge silencieusement l'API GitHub
-Releases du dépôt (voir `GITHUB_REPO` dans
-`diffusion_pdf/update/updater.py`). Si une version plus récente est
-disponible :
-
-1. Le nouvel exécutable est téléchargé et son empreinte SHA-256 vérifiée.
-2. L'exécutable courant est remplacé (via renommage à chaud, sans outil
-   externe) et relancé automatiquement.
-3. Aucune interaction utilisateur n'est requise ; la session de tri en
-   cours n'est pas perdue (aucun fichier n'est déplacé pendant la mise à
-   jour).
-
-Un accès sortant à `api.github.com` / `github.com` est nécessaire (poste
-sans internet ou derrière un proxy bloquant : la vérification échoue
-silencieusement et l'application continue de fonctionner normalement avec
-sa version installée).
-
-Pour publier une nouvelle version :
-
-1. Mettre à jour `diffusion_pdf/version.py`.
-2. Lancer `.\build.ps1`.
-3. Créer une *release* GitHub avec le tag `vX.Y.Z` et y joindre
-   `DiffusionPDF-win64.exe` et `DiffusionPDF-win64.exe.sha256`.
+Il n'y a pas de mise à jour automatique : pour changer de version, remplacer
+l'exécutable `DiffusionPDF-win64.exe` (produit par `.\build.ps1`) sur chaque poste.
 
 ## Structure du projet
 
@@ -192,8 +180,6 @@ diffusion_pdf/
 │   ├── pdf_view.py            # rendu, zoom, impression, touches
 │   ├── main_window.py         # assemblage, distribution
 │   └── locations_dialog.py    # popup F1 (emplacements)
-└── update/
-    └── updater.py             # vérification et application des mises à jour
 packaging/
 ├── entrypoint.py              # point d'entrée dédié pour PyInstaller
 ├── diffusion_pdf.spec

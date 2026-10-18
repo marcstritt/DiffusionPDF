@@ -17,6 +17,13 @@ DEFAULT_STABLE_CHECK_MS = 500
 # page. Espace n'est jamais concerné : il reste immédiat.
 DEFAULT_ARROW_LOCK_SECONDS = 2.0
 
+# Fermeture automatique après ce délai sans action de l'utilisateur (0 = jamais).
+DEFAULT_IDLE_TIMEOUT_SECONDS = 60.0
+
+# Nombre de documents traités par lot (0 = tout ce qui est présent). Les
+# nouveaux fichiers arrivés dans INPUT ne sont pris qu'une fois le lot fini.
+DEFAULT_BATCH_SIZE = 20
+
 # Nom du fichier "pointeur" écrit à l'emplacement standard quand l'utilisateur
 # choisit d'enregistrer config.toml ailleurs (autre dossier, clé USB, partage
 # réseau...) au premier lancement — contient simplement le chemin réel du
@@ -37,6 +44,8 @@ class Config:
     output_space: Path
     stable_file_check_ms: int = DEFAULT_STABLE_CHECK_MS
     arrow_lock_seconds: float = DEFAULT_ARROW_LOCK_SECONDS
+    idle_timeout_seconds: float = DEFAULT_IDLE_TIMEOUT_SECONDS
+    batch_size: int = DEFAULT_BATCH_SIZE
 
     @staticmethod
     def config_path() -> Path:
@@ -120,6 +129,8 @@ output_space = "{output_space.as_posix()}"
 [behavior]
 stable_file_check_ms = {DEFAULT_STABLE_CHECK_MS}
 arrow_lock_seconds = {DEFAULT_ARROW_LOCK_SECONDS}
+idle_timeout_seconds = {DEFAULT_IDLE_TIMEOUT_SECONDS}  # 0 = pas de fermeture automatique
+batch_size = {DEFAULT_BATCH_SIZE}  # 0 = pas de limite
 '''
         path.write_text(content, encoding="utf-8")
         cls._write_locator_if_needed(path)
@@ -176,6 +187,10 @@ arrow_lock_seconds = {DEFAULT_ARROW_LOCK_SECONDS}
                 arrow_lock_seconds=float(
                     behavior.get("arrow_lock_seconds", DEFAULT_ARROW_LOCK_SECONDS)
                 ),
+                idle_timeout_seconds=float(
+                    behavior.get("idle_timeout_seconds", DEFAULT_IDLE_TIMEOUT_SECONDS)
+                ),
+                batch_size=int(behavior.get("batch_size", DEFAULT_BATCH_SIZE)),
             )
         except KeyError as exc:
             raise ConfigError(f"Clé manquante dans {path} : {exc}") from exc

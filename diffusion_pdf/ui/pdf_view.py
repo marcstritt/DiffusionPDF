@@ -111,22 +111,6 @@ class PdfView(QPdfView):
             return
         super().keyReleaseEvent(event)
 
-    def ideal_content_width(self) -> Optional[int]:
-        """Largeur en pixels nécessaire pour afficher la page courante sans
-        rogner ni laisser de bande vide, au zoom d'ajustement en hauteur actuel."""
-        document = self.document()
-        if document is None or document.status() != QPdfDocument.Status.Ready:
-            return None
-        page_count = document.pageCount()
-        if page_count == 0:
-            return None
-        page = min(max(self.pageNavigator().currentPage(), 0), page_count - 1)
-        page_size = document.pagePointSize(page)
-        if page_size.height() <= 0:
-            return None
-        points_to_px = self.logicalDpiX() / 72.0
-        return round(page_size.width() * self._base_zoom * points_to_px)
-
     def _print(self) -> None:
         document = self.document()
         if document is None or document.status() != QPdfDocument.Status.Ready:

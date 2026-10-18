@@ -2,12 +2,11 @@
 
 Visionneuse PDF plein écran (PySide6/Qt) pour tri manuel INPUT ->
 OUTPUT_LEFT / OUTPUT_RIGHT / OUTPUT_SPACE au clavier. Windows v1,
-compilée en exécutable unique (PyInstaller) avec auto-update silencieux
-via GitHub Releases.
+compilée en exécutable unique (PyInstaller) (l'auto-update a été supprimé, voir ci-dessous).
 
 Dépôt : https://github.com/marcstritt/DiffusionPDF (public — nécessaire
 pour que l'auto-update, non authentifié, fonctionne sur les postes
-clients). Dernière version publiée : **v0.1.6**.
+clients). Dernière version : **v0.1.7** (pas de release GitHub, auto-update supprimé).
 
 Le README.md documente l'usage, la configuration, le build et
 l'installation en production — s'y référer pour tout ce qui est stable.
@@ -15,6 +14,12 @@ Ce fichier note plutôt le *pourquoi* des décisions et ce qui reste
 fragile ou non testé.
 
 ## Décisions prises (et pourquoi)
+
+- **Auto-update supprimé** (après v0.1.6, sur demande : inutile) : le
+  paquet `diffusion_pdf/update/`, les dépendances `requests`/`packaging` et
+  l'empreinte SHA-256 de `build.ps1` ont disparu. Les mentions d'auto-update,
+  de GitHub Releases et de `GITHUB_REPO` ci-dessous sont **historiques** : la
+  mise à jour d'un poste se fait en remplaçant l'exécutable à la main.
 
 - **QtPdf natif (`QPdfDocument`/`QPdfView`)** plutôt que PyMuPDF : PyMuPDF
   est en AGPL, problématique pour une distribution commerciale interne.
@@ -97,6 +102,23 @@ fragile ou non testé.
   `main_window.py`), ne bloque que ←/→ (Espace reste toujours
   immédiat), et est réintroduite sur demande explicite de l'utilisateur
   pour éviter un tri accidentel avant d'avoir vu la page.
+
+- **Lots, ordre chronologique, fermeture auto, géométrie libre**
+  (v0.1.7, sur demande) : `QueueManager` trie par date de
+  création (`st_ctime` sous Windows) et travaille par lots (`batch_size`,
+  20 par défaut, 0 = illimité) ; `refill_batch()` n'est appelé que quand le
+  lot précédent est vide (donc ni préchargement ni nouveaux fichiers d'un lot
+  suivant avant la fin). Un document illisible est écarté via
+  `QueueManager.skip` (remplace `_broken_paths`). L'appli se ferme (`quit`
+  différé) après `idle_timeout_seconds` quand `INPUT` n'a plus aucun PDF non écarté
+  (minuteur annulé si un document apparaît ; aussi au démarrage), et après `idle_timeout_seconds` (60 s, 0 = jamais) sans
+  clavier/souris (event filter applicatif). La taille de fenêtre n'est plus
+  jamais forcée (`_fit_window_to_page` et `ideal_content_width` supprimés) :
+  géométrie sauvegardée/restaurée via `QSettings` (profil utilisateur), A4
+  pleine hauteur seulement au tout premier lancement. Testé sous Linux
+  offscreen (ordre, lot de 3 avec fichier arrivé en cours de lot, quit sur
+  INPUT vide, quit sur inactivité, géométrie enregistrée) ; **jamais testé
+  sur Windows ni publié** (pas de bump de version / release faits).
 
 ## Bugs réels trouvés en testant (pas en relisant le code)
 

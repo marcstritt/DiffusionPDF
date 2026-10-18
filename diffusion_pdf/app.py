@@ -10,7 +10,6 @@ from .config import Config, ConfigError
 from .shortcut import ensure_desktop_shortcut
 from .ui.main_window import MainWindow
 from .ui.setup_dialog import SetupDialog
-from .update.updater import cleanup_old_executable
 
 
 def _icon_path() -> Path:
@@ -20,7 +19,6 @@ def _icon_path() -> Path:
 
 
 def main() -> int:
-    cleanup_old_executable()
     ensure_desktop_shortcut()
 
     app = QApplication(sys.argv)

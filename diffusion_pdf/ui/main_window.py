@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import QByteArray, QEvent, QSettings, QTimer
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtPdf import QPdfDocument
 from PySide6.QtWidgets import QApplication, QMainWindow, QMessageBox
@@ -12,7 +12,6 @@ from ..config import Config
 from ..core.cache import Preloader
 from ..core.distributor import move_to_bin
 from ..core.queue_manager import QueueManager
-from ..update.updater import UpdateWorker
 from ..version import __version__
 from .locations_dialog import LocationsDialog
 from .pdf_view import PdfView
@@ -20,8 +19,9 @@ from .pdf_view import PdfView
 
 class MainWindow(QMainWindow):
     # Ratio largeur/hauteur d'une page A4 portrait (595 x 842 pt) : seul
-    # format affiché par l'application, sert de largeur de fenêtre initiale
-    # avant le chargement du premier document.
+    # format affiché par l'application, sert de taille de fenêtre au tout
+    # premier lancement (ensuite la géométrie choisie par l'utilisateur est
+    # reprise telle quelle).
     _A4_ASPECT_RATIO = 595 / 842
 
     # Documents chargés en arrière-plan en avance du document affiché : borné
@@ -36,8 +36,6 @@ class MainWindow(QMainWindow):
         self._current_path: Optional[Path] = None
         self._current_document: Optional[QPdfDocument] = None
         self._preload_paths: list[Path] = []
-        self._broken_paths: set[Path] = set()
-        self._window_fitted = False
 
         # Bloque ←/→ pendant config.arrow_lock_seconds après l'affichage de
         # chaque document (Espace reste immédiat) : laisse le temps de voir
@@ -56,7 +54,12 @@ class MainWindow(QMainWindow):
         self._pdf_view.space_pressed.connect(self._on_space)
         self._pdf_view.help_requested.connect(self._show_locations_dialog)
 
-        self._queue = QueueManager(config.input_dir, poll_interval_ms=config.stable_file_check_ms, parent=self)
+        self._queue = QueueManager(
+            config.input_dir,
+            poll_interval_ms=config.stable_file_check_ms,
+            batch_size=config.batch_size,
+            parent=self,
+        )
         self._queue.queue_changed.connect(self._on_queue_changed)
         self._queue.queue_changed.connect(self._refresh_title)
 
@@ -64,9 +67,17 @@ class MainWindow(QMainWindow):
 
         self._init_geometry()
 
-        self._update_worker = UpdateWorker(self)
-        self._update_worker.update_applied.connect(QApplication.quit)
-        self._update_worker.start()
+        # Fermeture automatique après inactivité de l'utilisateur.
+        self._idle_timer = QTimer(self)
+        self._idle_timer.setSingleShot(True)
+        self._idle_timer.timeout.connect(QApplication.quit)
+        # Même délai quand INPUT est vide : annulé dès qu'un document apparaît.
+        self._empty_timer = QTimer(self)
+        self._empty_timer.setSingleShot(True)
+        self._empty_timer.timeout.connect(QApplication.quit)
+        if config.idle_timeout_seconds > 0:
+            QApplication.instance().installEventFilter(self)
+            self._reset_idle_timer()
 
         self._queue.start()
         self._advance()
@@ -83,12 +94,38 @@ class MainWindow(QMainWindow):
         LocationsDialog(entries, self).exec()
 
     # ---- fenêtre ----
+    _SETTINGS_GEOMETRY_KEY = "window/geometry"
+
     def _init_geometry(self) -> None:
-        # Toujours pleine hauteur d'écran : seul format affiché (A4) sert de
-        # largeur de départ, affinée par document via _fit_window_to_page.
+        # Géométrie choisie par l'utilisateur lors de la session précédente
+        # (QSettings = profil de l'utilisateur Windows) ; à défaut, au tout
+        # premier lancement, pleine hauteur d'écran en format A4.
+        saved = QSettings().value(self._SETTINGS_GEOMETRY_KEY)
+        if isinstance(saved, QByteArray) and self.restoreGeometry(saved):
+            return
         screen = QGuiApplication.primaryScreen().availableGeometry()
         width = round(screen.height() * self._A4_ASPECT_RATIO)
         self.setGeometry(screen.x(), screen.y(), width, screen.height())
+
+    def closeEvent(self, event) -> None:
+        QSettings().setValue(self._SETTINGS_GEOMETRY_KEY, self.saveGeometry())
+        super().closeEvent(event)
+
+    # ---- inactivité ----
+    _ACTIVITY_EVENTS = {
+        QEvent.Type.KeyPress,
+        QEvent.Type.MouseButtonPress,
+        QEvent.Type.MouseMove,
+        QEvent.Type.Wheel,
+    }
+
+    def eventFilter(self, watched, event) -> bool:
+        if event.type() in self._ACTIVITY_EVENTS:
+            self._reset_idle_timer()
+        return False
+
+    def _reset_idle_timer(self) -> None:
+        self._idle_timer.start(round(self._config.idle_timeout_seconds * 1000))
 
     def _set_title(self, text: str) -> None:
         self._title_text = text
@@ -114,7 +151,7 @@ class MainWindow(QMainWindow):
             self._fill_preload_queue()
 
     def _exclude_set(self) -> set[Path]:
-        exclude = set(self._broken_paths)
+        exclude: set[Path] = set()
         if self._current_path is not None:
             exclude.add(self._current_path)
         exclude.update(self._preload_paths)
@@ -139,9 +176,24 @@ class MainWindow(QMainWindow):
             doc = None
 
         if path is None:
+            # Lot précédent entièrement traité : on ne regarde les nouveaux
+            # fichiers qu'à ce moment-là.
+            self._queue.refill_batch()
+            path = self._queue.next_candidate(self._exclude_set())
+
+        if path is None:
             self._pdf_view.set_document(None)
-            self._set_title("Diffusion PDF — en attente de documents")
+            if self._queue.has_pending():
+                self._set_title("Diffusion PDF — en attente de documents")
+            else:
+                # Plus aucun PDF dans INPUT : rien à trier, fermeture après le
+                # même délai que l'inactivité (0 = jamais).
+                self._set_title("Diffusion PDF — INPUT vide")
+                if self._config.idle_timeout_seconds > 0 and not self._empty_timer.isActive():
+                    self._empty_timer.start(round(self._config.idle_timeout_seconds * 1000))
             return
+
+        self._empty_timer.stop()
 
         self._show(path, doc)
 
@@ -153,7 +205,6 @@ class MainWindow(QMainWindow):
 
         if doc is not None and doc.status() == QPdfDocument.Status.Ready:
             self._pdf_view.set_document(doc)
-            self._on_document_ready()
         else:
             doc = doc or QPdfDocument(self)
             self._current_document = doc
@@ -170,9 +221,8 @@ class MainWindow(QMainWindow):
             return
         if status == QPdfDocument.Status.Ready:
             self._pdf_view.set_document(doc)
-            self._on_document_ready()
         elif status == QPdfDocument.Status.Error:
-            self._broken_paths.add(path)
+            self._queue.skip(path)
             self._current_document = None
             doc.deleteLater()
             QMessageBox.warning(
@@ -197,25 +247,6 @@ class MainWindow(QMainWindow):
 
     def _unlock_arrows(self) -> None:
         self._arrows_locked = False
-
-    def _on_document_ready(self) -> None:
-        # La fenêtre ne s'adapte qu'au tout premier document affiché : ensuite
-        # l'utilisateur peut l'agrandir/redimensionner librement, sans qu'un
-        # document suivant ne l'y ramène de force.
-        if not self._window_fitted:
-            self._window_fitted = True
-            self._fit_window_to_page()
-
-    # ---- largeur de fenêtre adaptée à la page (hauteur toujours pleine) ----
-    def _fit_window_to_page(self) -> None:
-        ideal_width = self._pdf_view.ideal_content_width()
-        if ideal_width is None:
-            return
-        chrome = self.width() - self._pdf_view.viewport().width()
-        target_width = ideal_width + chrome
-        screen = QGuiApplication.primaryScreen().availableGeometry()
-        target_width = max(1, min(target_width, screen.width()))
-        self.resize(target_width, self.height())
 
     # ---- distribution ----
     def _on_left(self) -> None:
