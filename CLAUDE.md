@@ -6,10 +6,8 @@ compilée en exécutable unique (PyInstaller) (l'auto-update a été supprimé, 
 
 Dépôt : https://github.com/marcstritt/DiffusionPDF (public — nécessaire
 pour que l'auto-update, non authentifié, fonctionne sur les postes
-clients). Dernière version : **v0.1.7** (tag + release GitHub sans exécutable
-joint ; auto-update supprimé). Le correctif PDF illisible/verrouillé (voir
-ci-dessous) est commité **après** le tag v0.1.7 mais affiche toujours
-"v0.1.7" : passer à 0.1.8 avant de le distribuer.
+clients). Dernière version : **v0.1.8** (tag poussé, pas de release GitHub ;
+auto-update supprimé) = v0.1.7 + correctif PDF illisible/verrouillé.
 
 Le README.md documente l'usage, la configuration, le build et
 l'installation en production — s'y référer pour tout ce qui est stable.
@@ -125,7 +123,7 @@ fragile ou non testé.
   + release GitHub), mais sans exécutable joint.
 
 - **PDF verrouillé par un autre programme : 3 tentatives de lecture
-  espacées de 10 s, puis abandon** (post-v0.1.7, sur demande) :
+  espacées de 10 s, puis abandon** (v0.1.8, sur demande) :
   `_LOCKED_READ_ATTEMPTS`/`_LOCKED_READ_RETRY_MS` dans `main_window.py`.
   `QPdfDocument` renvoie `FileNotFound` pour un fichier ouvert en exclusivité
   (indiscernable d'un fichier absent), d'où la détection par une simple
@@ -404,9 +402,8 @@ Par priorité :
    fichiers patients réels, identiques par paire, laissés intentionnellement
    en l'état (pas supprimés par Claude). Le fix empêche la récidive mais ne
    nettoie pas l'existant.
-2. **Distribuer la version suivante à la main** (plus d'auto-update) :
-   passer `version.py` à 0.1.8 (correctif illisible/verrouillé), compiler,
-   remplacer l'exe en production (raccourci Bureau actuel →
+2. **Distribuer v0.1.8 à la main** (plus d'auto-update) :
+   `dist/DiffusionPDF-win64.exe` (déjà compilé), remplacer l'exe en production (raccourci Bureau actuel →
    `C:\Users\mcs\Downloads\DiffusionPDF-win64 (1).exe`), joindre l'exe à une
    release GitHub si on les garde. Puis valider en usage réel : tri par vraie
    pression de touche, verrou ←/→ de 2 s, lots, fermeture auto à 60 s.
@@ -423,11 +420,11 @@ Par priorité :
 
 ## État à la fin de la session (2026-10-19)
 
-v0.1.7 compilée et testée sous Windows (voir "Comment j'ai testé").
-Correctif PDF illisible/verrouillé commité sur `main` après le tag v0.1.7
-(non poussé, version non incrémentée). `dist/DiffusionPDF-win64.exe` (+
-`.sha256` régénéré) contient ce correctif mais affiche "v0.1.7" ; il n'est
-joint à aucune release. Restent : la liste ci-dessus (doublons de
+v0.1.7 testée sous Windows (voir "Comment j'ai testé"), puis v0.1.8
+(= v0.1.7 + correctif PDF illisible/verrouillé) compilée, titre
+`v0.1.8` vérifié sur l'exe, commitée, taguée et poussée sur `origin/main`.
+`dist/DiffusionPDF-win64.exe` (+ `.sha256`) n'est joint à aucune release
+GitHub, et n'est pas encore installé en production. Restent : la liste ci-dessus (doublons de
 production, distribution manuelle + validation réelle), et le choix
 d'aligner ou non le déplacement d'un fichier verrouillé sur la règle
 3 × 10 s de la lecture.
