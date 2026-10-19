@@ -6,7 +6,7 @@ compilée en exécutable unique (PyInstaller) (l'auto-update a été supprimé, 
 
 Dépôt : https://github.com/marcstritt/DiffusionPDF (public — nécessaire
 pour que l'auto-update, non authentifié, fonctionne sur les postes
-clients). Dernière version : **v0.1.8** (tag poussé, pas de release GitHub ;
+clients). Dernière version : **v0.1.8** (tag + release GitHub avec exe et `.sha256` ;
 auto-update supprimé) = v0.1.7 + correctif PDF illisible/verrouillé.
 
 Le README.md documente l'usage, la configuration, le build et
@@ -403,9 +403,9 @@ Par priorité :
    en l'état (pas supprimés par Claude). Le fix empêche la récidive mais ne
    nettoie pas l'existant.
 2. **Distribuer v0.1.8 à la main** (plus d'auto-update) :
-   `dist/DiffusionPDF-win64.exe` (déjà compilé), remplacer l'exe en production (raccourci Bureau actuel →
-   `C:\Users\mcs\Downloads\DiffusionPDF-win64 (1).exe`), joindre l'exe à une
-   release GitHub si on les garde. Puis valider en usage réel : tri par vraie
+   exe de la release v0.1.8 (ou `dist/`), remplacer l'exe en production
+   (raccourci Bureau actuel →
+   `C:\Users\mcs\Downloads\DiffusionPDF-win64 (1).exe`). Puis valider en usage réel : tri par vraie
    pression de touche, verrou ←/→ de 2 s, lots, fermeture auto à 60 s.
 3. **Tester le dialogue de première ouverture pour de vrai**, sur un
    poste ou profil Windows sans `config.toml` existant (jamais fait —
@@ -423,8 +423,8 @@ Par priorité :
 v0.1.7 testée sous Windows (voir "Comment j'ai testé"), puis v0.1.8
 (= v0.1.7 + correctif PDF illisible/verrouillé) compilée, titre
 `v0.1.8` vérifié sur l'exe, commitée, taguée et poussée sur `origin/main`.
-`dist/DiffusionPDF-win64.exe` (+ `.sha256`) n'est joint à aucune release
-GitHub, et n'est pas encore installé en production. Restent : la liste ci-dessus (doublons de
+Release GitHub v0.1.8 publiée avec `DiffusionPDF-win64.exe` + `.sha256`
+(exe retéléchargé, SHA-256 identique). Pas encore installée en production. Restent : la liste ci-dessus (doublons de
 production, distribution manuelle + validation réelle), et le choix
 d'aligner ou non le déplacement d'un fichier verrouillé sur la règle
 3 × 10 s de la lecture.
