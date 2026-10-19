@@ -6,7 +6,10 @@ compilée en exécutable unique (PyInstaller) (l'auto-update a été supprimé, 
 
 Dépôt : https://github.com/marcstritt/DiffusionPDF (public — nécessaire
 pour que l'auto-update, non authentifié, fonctionne sur les postes
-clients). Dernière version : **v0.1.7** (pas de release GitHub, auto-update supprimé).
+clients). Dernière version : **v0.1.7** (tag + release GitHub sans exécutable
+joint ; auto-update supprimé). Le correctif PDF illisible/verrouillé (voir
+ci-dessous) est commité **après** le tag v0.1.7 mais affiche toujours
+"v0.1.7" : passer à 0.1.8 avant de le distribuer.
 
 Le README.md documente l'usage, la configuration, le build et
 l'installation en production — s'y référer pour tout ce qui est stable.
@@ -117,10 +120,24 @@ fragile ou non testé.
   géométrie sauvegardée/restaurée via `QSettings` (profil utilisateur), A4
   pleine hauteur seulement au tout premier lancement. Testé sous Linux
   offscreen (ordre, lot de 3 avec fichier arrivé en cours de lot, quit sur
-  INPUT vide, quit sur inactivité, géométrie enregistrée) ; **jamais testé
-  sur Windows**. Publié en v0.1.7 (tag + release GitHub), mais sans exécutable
-  joint : à compiler sous Windows (`build.ps1`) puis à ajouter avec
-  `gh release upload v0.1.7 dist/DiffusionPDF-win64.exe`.
+  INPUT vide, quit sur inactivité, géométrie enregistrée), puis **testé sous
+  Windows le 2026-10-19** (voir "Comment j'ai testé"). Publié en v0.1.7 (tag
+  + release GitHub), mais sans exécutable joint.
+
+- **PDF verrouillé par un autre programme : 3 tentatives de lecture
+  espacées de 10 s, puis abandon** (post-v0.1.7, sur demande) :
+  `_LOCKED_READ_ATTEMPTS`/`_LOCKED_READ_RETRY_MS` dans `main_window.py`.
+  `QPdfDocument` renvoie `FileNotFound` pour un fichier ouvert en exclusivité
+  (indiscernable d'un fichier absent), d'où la détection par une simple
+  ouverture Python (`_is_locked` : `PermissionError` = verrou). Pendant
+  l'attente, le titre affiche "nouvelle tentative (n/3) dans 10 s" et
+  ←/→/Espace sont sans effet. Après abandon (ou PDF illisible), le fichier
+  est écarté (`QueueManager.skip`) **pour toute la session** — choix
+  assumé pour ne pas refaire 20 s d'attente à chaque lot ; il est repris au
+  lancement suivant. ⚠️ Le *déplacement* d'un fichier verrouillé garde
+  l'ancienne règle (`_MOVE_RETRY_MAX` × `_MOVE_RETRY_MS` = 1 s, puis
+  message ; l'affichage reste vide et une nouvelle touche relance un essai) —
+  non aligné sur la règle de lecture, à décider si besoin.
 
 ## Bugs réels trouvés en testant (pas en relisant le code)
 
@@ -214,6 +231,19 @@ réapparaît :
    test intensif, pas un problème du code. Si ça se reproduit en usage
    réel (tri qui échoue avec le message "fichier verrouillé"), envisager
    d'augmenter `_MOVE_RETRY_MAX`/`_MOVE_RETRY_MS` dans `main_window.py`.
+8. **PDF illisible préchargé = appli figée** (trouvé le 2026-10-19 en
+   relisant `_show`, puis reproduit sur le code de v0.1.7) — un document
+   préchargé déjà en état `Error` n'était ni rechargé ni signalé (aucun
+   `statusChanged` ne vient plus) : page vide, pas de message, file
+   bloquée. Fix : `_load_current` traite directement un préchargé en
+   `Error`. Vérifié avant (blocage reproduit) / après (écarté + message).
+9. **Réentrance sur PDF illisible** (même session) — `QPdfDocument.load()`
+   émet `Loading` puis `Error` **de façon synchrone** ; le handler faisait
+   `deleteLater()` + `QMessageBox` (boucle imbriquée) *pendant* `load()`.
+   Segfault reproduit dans un harnais sans `app.exec()` (Qt y exécute le
+   `deleteLater` dans la boucle du message) ; **pas** reproduit sous un vrai
+   `app.exec()` (4 essais), mais fragile. Fix : erreur traitée via
+   `QTimer.singleShot(0, ...)` (`_on_load_failed`).
 
 ## Comment j'ai testé (utile pour la prochaine session)
 
@@ -299,6 +329,31 @@ réapparaît :
   vérifier `GET /releases/tags/<tag>` : si elle existe déjà avec le bon
   contenu, il suffit d'uploader les assets sur son `upload_url`, pas de
   la recréer.
+- **Tests Windows de v0.1.7 (2026-10-19)** : plateforme native (pas
+  offscreen), copies de 6 PDF réels (depuis `OUTPUT_RIGHT`) dans le
+  scratchpad, `QSettings` isolés (`setOrganizationName("PromedTest")`,
+  `clear()` en fin de test — jamais la géométrie réelle). 27/27 : ordre
+  chronologique, verrou ←/→, tri 3 dossiers sans doublon, lots de 3 avec
+  fichier arrivé en cours, illisible, quit INPUT vide / inactivité / activité
+  qui repousse, géométrie premier lancement + restaurée, rendu (capture
+  PNG relue). Exe compilé lancé sur la vraie config (INPUT réel vide, donc
+  aucun tri possible) : titre `v0.1.7 [0] … INPUT vide`, fermeture seule à
+  61 s. PDF verrouillés : handle exclusif via `ctypes`
+  `CreateFileW(path, GENERIC_READ, share=0, …)` — 16/16 avec délai réduit à
+  1 s (`MainWindow._LOCKED_READ_RETRY_MS = 1000`), + 1 test au délai réel
+  (abandon à 20,6 s).
+- **⚠️ Pièges de harnais rencontrés (2026-10-19)** : (a) `build.ps1` en
+  PowerShell 5.1 avec `*>&1` s'arrête sur le premier message stderr de
+  PyInstaller (`$ErrorActionPreference = "Stop"`) — lancer
+  `.venv/Scripts/pyinstaller.exe packaging/diffusion_pdf.spec --noconfirm`
+  directement ; (b) console cp1252 : `PYTHONIOENCODING=utf-8` pour les
+  scripts qui affichent ←/→ ; (c) tester sans `app.exec()` (boucle
+  `QTest.qWait`) change la sémantique de `deleteLater` dans une boucle
+  imbriquée → faux segfault (bug #9) ; (d) `QTimer.singleShot` de sécurité
+  non annulé d'un scénario précédent qui appelle `app.exit()` au milieu du
+  suivant → utiliser un `QTimer` arrêté après `exec()` ; (e) avec un délai
+  de fermeture très court (1,5 s), la course avec la détection "fichier
+  prêt" (2 scans ≈ 1 s) fait échouer le test — artefact, prévoir ≥ 3 s.
 
 ## Non testé / fragile
 
@@ -326,9 +381,6 @@ réapparaît :
 - **Déploiement multi-postes** : pas de script central ; chaque poste a
   sa propre config (`%LOCALAPPDATA%`). À industrialiser si le nombre de
   postes grandit (GPO, script de connexion — voir README).
-- **Comportement si `GITHUB_REPO` change de nom/propriétaire** :
-  `diffusion_pdf/update/updater.py` a la constante en dur ; à mettre à
-  jour manuellement si le dépôt est déplacé/renommé.
 - **Dialogue de première ouverture (`SetupDialog`, v0.1.6)** : jamais
   déclenché comme un vrai premier lancement (nécessite l'absence de
   `config.toml`, ce qui n'est vrai sur aucun poste disponible pour
@@ -352,15 +404,12 @@ Par priorité :
    fichiers patients réels, identiques par paire, laissés intentionnellement
    en l'état (pas supprimés par Claude). Le fix empêche la récidive mais ne
    nettoie pas l'existant.
-2. **Confirmer en conditions réelles** (pas en scratchpad) que
-   l'instance déjà en cours d'utilisation par l'utilisateur (lancée depuis
-   `C:\Users\mcs\Downloads\DiffusionPDF-win64 (1).exe`) se met bien à
-   jour vers **v0.1.6** toute seule au prochain lancement. Cette version
-   apporte plusieurs changements de comportement jamais vérifiés en usage
-   réel (voir "Non testé / fragile" ci-dessus) : verrou ←/→ de 2 s qui
-   "se sent" bien, fenêtre qui ne se redimensionne plus qu'au premier
-   document, scrollbar toujours visible. À observer au premier tri réel
-   après la mise à jour.
+2. **Distribuer la version suivante à la main** (plus d'auto-update) :
+   passer `version.py` à 0.1.8 (correctif illisible/verrouillé), compiler,
+   remplacer l'exe en production (raccourci Bureau actuel →
+   `C:\Users\mcs\Downloads\DiffusionPDF-win64 (1).exe`), joindre l'exe à une
+   release GitHub si on les garde. Puis valider en usage réel : tri par vraie
+   pression de touche, verrou ←/→ de 2 s, lots, fermeture auto à 60 s.
 3. **Tester le dialogue de première ouverture pour de vrai**, sur un
    poste ou profil Windows sans `config.toml` existant (jamais fait —
    voir "Non testé / fragile") : les deux modes ("nouvelle
@@ -372,18 +421,13 @@ Par priorité :
 5. Envisager la signature de code si le nombre de postes en production
    augmente (évite l'alerte SmartScreen à chaque poste).
 
-## État à la fin de la session (2026-08-05)
+## État à la fin de la session (2026-10-19)
 
-v0.1.6 committée (plusieurs commits, voir `git log`), poussée sur
-`origin/main` et publiée sur GitHub Releases avec les deux assets
-(`DiffusionPDF-win64.exe`, `.sha256`) — build testé (lancé comme
-process isolé, version affichée dans le titre confirmée) avant
-publication. Contenu de v0.1.6 : fenêtre adaptée au premier PDF
-seulement, scrollbar verticale toujours visible, préchargement borné à
-2 documents, dialogue de configuration au premier lancement, verrou
-temporisé ←/→ configurable (`arrow_lock_seconds`, 2 s par défaut).
-Rien en attente côté code : tous les changements demandés sont
-commités et poussés. Le seul suivi manuel restant est la liste
-ci-dessus, en particulier les points 1 (doublons de production
-toujours en place) et 2/3 (plusieurs comportements de v0.1.6 jamais
-vérifiés en conditions réelles, seulement testés en isolation).
+v0.1.7 compilée et testée sous Windows (voir "Comment j'ai testé").
+Correctif PDF illisible/verrouillé commité sur `main` après le tag v0.1.7
+(non poussé, version non incrémentée). `dist/DiffusionPDF-win64.exe` (+
+`.sha256` régénéré) contient ce correctif mais affiche "v0.1.7" ; il n'est
+joint à aucune release. Restent : la liste ci-dessus (doublons de
+production, distribution manuelle + validation réelle), et le choix
+d'aligner ou non le déplacement d'un fichier verrouillé sur la règle
+3 × 10 s de la lecture.
